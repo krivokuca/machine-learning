@@ -27,7 +27,7 @@ class Detector(nn.Module):
 
 
 class ObjectRecognizer(nn.Module):
-    def __init__(self):
+    def __init__(self, CUDA=True):
         '''
         This model implements the YOLOV3 (you only look once v3) object recognition
         architecture to recognize objects. It includes a rudimentary dataloader that
@@ -36,7 +36,7 @@ class ObjectRecognizer(nn.Module):
         @author Daniel Krivokuca
         @date 2020-03-08
         '''
-        super(ObjectRecognizer, self, CUDA=True).__init__()
+        super(ObjectRecognizer, self).__init__()
         self.structure = self.parse_structure_object()
         self.network_info, self.network = self.build_network()
         self.GPU = CUDA
@@ -47,11 +47,12 @@ class ObjectRecognizer(nn.Module):
     def forward(self, x):
         layers = self.structure[1:]
         outputs = {}
-        collector_initialized = 0
+        collector_initialized = False
+
         # iterate over our network layers
         for i, layer in enumerate(layers):
             layer_name = layer['name']
-
+            print(layer_name)
             if(layer_name == "convolutional" or layer_name == "upsample"):
                 x = self.network[i](x)
 
@@ -89,14 +90,18 @@ class ObjectRecognizer(nn.Module):
                     x, input_dimensions, anchors, num_classes)
                 if not collector_initialized:
                     detections = x
-                    collector_initialized = 1
+                    print("DETECTION ")
+                    collector_initialized = True
 
                 else:
                     detections = torch.cat((detections, x), 1)
 
-                outputs[i] = x
+            outputs[i] = x
 
+        try:
             return detections
+        except:
+            return 0
 
     def feature_map_to_tensor(prediction, input_dimensions, anchors, num_classes):
         '''
@@ -241,7 +246,6 @@ class ObjectRecognizer(nn.Module):
                 shortcut = EmptyLayer()
                 modules.add_module("shortcut_{}".format(i), shortcut)
 
-            # the detection layer
             elif(val['name'] == 'yolo'):
                 mask = val['mask'].split(',')
                 mask = [int(m) for m in mask]
