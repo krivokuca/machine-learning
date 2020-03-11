@@ -241,6 +241,7 @@ class ObjectRecognizer(nn.Module):
                 shortcut = EmptyLayer()
                 modules.add_module("shortcut_{}".format(i), shortcut)
 
+            # the detection layer
             elif(val['name'] == 'yolo'):
                 mask = val['mask'].split(',')
                 mask = [int(m) for m in mask]
