@@ -36,14 +36,15 @@ class ObjectRecognizer(nn.Module):
         @author Daniel Krivokuca
         @date 2020-03-08
         '''
-        super(ObjectRecognizer, self).__init__()
+        super(ObjectRecognizer, self, CUDA=True).__init__()
         self.structure = self.parse_structure_object()
         self.network_info, self.network = self.build_network()
+        self.GPU = CUDA
 
     # overwrite nn.Modules self.forward() function. Since we need the output of the last
     # features mask for our route and shortcut layers we need to store them in a dict and refer
     # to them once we reach those layers
-    def forward(self, x, CUDA=True):
+    def forward(self, x):
         layers = self.structure[1:]
         outputs = {}
         write = 0
@@ -74,7 +75,46 @@ class ObjectRecognizer(nn.Module):
 
             elif(layer_name == "shortcut"):
                 from_layer = int(layer['from'])
-                x = outputs[i-1]+outputs[i+from_layer]
+                x = outputs[i-1] + outputs[i+from_layer]
+
+    def feature_map_to_tensor(prediction, input_dimensions, anchors, num_classes):
+        '''
+        This function takes a feature ma and transforms it into a 2d tensor with each
+        row of the tensor representing a boundary box and each coordinate of the 
+        feature map. For example, given a 7x7 feature map, the output would be a bounding
+        box such that Bb_n = (x,y)
+        '''
+        stride = input_dimensions // prediction.size(2)
+        batch_size = prediction.size(0)
+        grid_size = input_dimensions // stride
+        bounding_box_attributes = 5 + num_classes
+
+        tensor_prediction = prediction.view(
+            batch_size, bounding_box_attributes * len(anchors), grid_size * grid_size)
+        tensor_prediction = tensor_prediction.transpose(1, 2).contiguous()
+        tensor_prediction = tensor_prediction.view(
+            batch_size, grid_size*grid_size*len(anchors), bounding_box_attributes)
+
+        # resize the anchors by dividing it by the stride
+        n_anchors = len(anchors)
+        anchors = [(x[0] / stride, x[1] / stride) for x in anchors]
+
+        # resize our prediction tensor
+        prediction[:, :, 0] = torch.sigmoid(prediction[:, :, 0])
+        prediction[:, :, 1] = torch.sigmoid(prediction[:, :, 1])
+        prediction[:, :, 4] = torch.sigmoid(prediction[:, :, 4])
+
+        grid_size = np.arange(grid_size)
+        x, y = np.meshgrid(grid_size, grid_size)
+        x_offset = torch.FloatTensor(x).view(-1, 1)
+        y_offset = torch.FloatTensor(y).view(-1, 1)
+
+        if self.GPU:
+            x_offset = x_offset.cuda()
+            y_offset = y_offset.cuda()
+
+        xy_offset = torch.cat((x_offset, y_offset), 1).repeat(
+            1, n_anchors).view(-1, 2).unsqueeze(0)
 
     def parse_structure_object(self):
         '''
