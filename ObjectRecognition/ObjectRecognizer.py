@@ -47,7 +47,7 @@ class ObjectRecognizer(nn.Module):
     def forward(self, x):
         layers = self.structure[1:]
         outputs = {}
-        write = 0
+        collector_initialized = 0
         # iterate over our network layers
         for i, layer in enumerate(layers):
             layer_name = layer['name']
@@ -77,12 +77,33 @@ class ObjectRecognizer(nn.Module):
                 from_layer = int(layer['from'])
                 x = outputs[i-1] + outputs[i+from_layer]
 
+            elif(layer_name == "yolo"):
+                # this is our detection layer
+                anchors = self.network[i][0].anchors
+                input_dimensions = int(self.network_info["height"])
+                num_classes = int(layer['classes'])
+
+                # apply the transformation
+                x = x.data
+                x = self.feature_map_to_tensor(
+                    x, input_dimensions, anchors, num_classes)
+                if not collector_initialized:
+                    detections = x
+                    collector_initialized = 1
+
+                else:
+                    detections = torch.cat((detections, x), 1)
+
+                outputs[i] = x
+
+            return detections
+
     def feature_map_to_tensor(prediction, input_dimensions, anchors, num_classes):
         '''
         This function takes a feature ma and transforms it into a 2d tensor with each
         row of the tensor representing a boundary box and each coordinate of the 
         feature map. For example, given a 7x7 feature map, the output would be a bounding
-        box such that Bb_n = (x,y)
+        box such that Bb_n = (x,y) for n in len(prediction)
         '''
         stride = input_dimensions // prediction.size(2)
         batch_size = prediction.size(0)
@@ -115,6 +136,19 @@ class ObjectRecognizer(nn.Module):
 
         xy_offset = torch.cat((x_offset, y_offset), 1).repeat(
             1, n_anchors).view(-1, 2).unsqueeze(0)
+
+        prediction[:, :, :2] += xy_offset
+        anchors = torch.FloatTensor(anchors)
+
+        if self.GPU:
+            anchors = anchors.cuda()
+
+        anchors = anchors.repeat(grid_size*grid_size, 1).unsqueeze(0)
+        prediction[:, :, 2:4] = torch.exp(prediction[:, :, 2:4]) * anchors
+        prediction[:, :, 5: 5 +
+                   num_classes] = torch.sigmoid((prediction[:, :, 5:5 + num_classes]))
+        prediction[:, :, :4] *= stride
+        return prediction
 
     def parse_structure_object(self):
         '''
