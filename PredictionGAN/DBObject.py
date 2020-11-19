@@ -14,7 +14,6 @@ class DBObject():
     '''
     The DBObjects is the primary way to insert, get and delete data from the
     database.
-    TODO : PORT THIS TO SQLALCHEMY FUCK THIS 
     '''
 
     def __init__(self):
