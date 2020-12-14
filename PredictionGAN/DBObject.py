@@ -17,8 +17,7 @@ class DBObject():
     '''
 
     def __init__(self):
-        self.credentials = ['localhost', 'botuser',
-                            '(#s@2R3F,U3?', 'vestra']
+        self.credentials = ['localhost', 'username', 'password', 'database']
         self.db = connect(
             creator=pymysql,
             host=self.credentials[0],
